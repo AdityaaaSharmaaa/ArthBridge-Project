@@ -6,6 +6,8 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
     steps:
       - name: Checkout Code
@@ -14,7 +16,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '20'
 
       - name: Setup Java for Android
         uses: actions/setup-java@v4
@@ -23,7 +25,7 @@ jobs:
           java-version: '17'
 
       - name: Install NPM Dependencies
-        run: npm install
+        run: npm install --legacy-peer-deps
 
       - name: Inject Firebase Keys
         run: |
@@ -36,7 +38,7 @@ jobs:
           echo "EXPO_PUBLIC_FIREBASE_APP_ID=1:584309371887:web:c750ee0dfdaf5233937c1a" >> .env
 
       - name: Generate Android Folder (Prebuild)
-        run: npx expo prebuild --clean
+        run: npx expo prebuild --clean --no-interactive
 
       - name: Build the APK (Debug Version)
         env:
