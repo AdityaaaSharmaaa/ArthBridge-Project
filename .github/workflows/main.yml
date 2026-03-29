@@ -8,6 +8,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+      CI: true
 
     steps:
       - name: Checkout Code
@@ -38,7 +39,7 @@ jobs:
           echo "EXPO_PUBLIC_FIREBASE_APP_ID=1:584309371887:web:c750ee0dfdaf5233937c1a" >> .env
 
       - name: Generate Android Folder (Prebuild)
-        run: npx expo prebuild --clean --no-interactive
+        run: npx expo prebuild --clean
 
       - name: Build the APK (Debug Version)
         env:
