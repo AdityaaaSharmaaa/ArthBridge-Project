@@ -1,31 +1,42 @@
 {
   "expo": {
-    "name": "GramSevak",
-    "slug": "GramSevak",
+    "name": "ArthBridge",
+    "slug": "ArthBridge",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
-    "newArchEnabled": true,
     "splash": {
-      "image": "./assets/splash-icon.png",
+      "image": "./assets/splash.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#1A365D" 
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.yourname.arthbridge"
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "backgroundColor": "#1A365D"
       },
-      "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false,
-      "package": "com.anonymous.GramSevak"
+      "package": "com.yourname.arthbridge"
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow ArthBridge to access your camera to scan offline payment QR codes."
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "YOUR_PROJECT_ID_WILL_GO_HERE_LATER"
+      }
     }
   }
 }

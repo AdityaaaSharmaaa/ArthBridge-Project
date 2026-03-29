@@ -1,115 +1,155 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, FlatList, Modal, TextInput, Alert } from 'react-native';
-import { Feather } from '@expo/vector-icons';
-import { COLORS } from '../theme/colors';
-import { useTranslation } from 'react-i18next';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity, ActivityIndicator, Modal, KeyboardAvoidingView, Platform, SafeAreaView } from 'react-native';
+import { Feather, Ionicons } from '@expo/vector-icons';
+import { collection, addDoc, onSnapshot, query, orderBy, updateDoc, doc } from 'firebase/firestore';
+import { db } from '../config/firebase';
+import { useAuth } from '../context/AuthContext';
+import { CustomAlert } from '../components/CustomAlert';
+import { useTheme } from '../context/ThemeContext'; // <-- Theme hook
 
-export const FlashSaleScreen = () => {
-  const { t } = useTranslation();
-  const [activeTab, setActiveTab] = useState<'buy' | 'sell'>('buy'); // What user is looking for
+export const FlashSaleScreen = ({ navigation }: any) => {
+  const { user } = useAuth();
+  const { theme, isDarkMode } = useTheme(); 
+  const [sales, setSales] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   const [modalVisible, setModalVisible] = useState(false);
-  
-  // Mock Data
-  const [posts, setPosts] = useState([
-    { id: '1', type: 'sell', item: 'Rice Seeds', qty: '50kg', price: '2000', user: 'Ramesh Store' },
-    { id: '2', type: 'buy', item: 'Wheat', qty: '100kg', price: '3000', user: 'Mandi Trader' },
-  ]);
 
-  // Form State
-  const [item, setItem] = useState('');
-  const [qty, setQty] = useState('');
+  const [itemName, setItemName] = useState('');
   const [price, setPrice] = useState('');
+  const [quantity, setQuantity] = useState('');
+  const [alertConfig, setAlertConfig] = useState<{visible: boolean, title: string, message: string, type: 'success' | 'error' | 'info'}>({ visible: false, title: '', message: '', type: 'info' });
 
-  const handlePost = () => {
-      const newPost = { id: Date.now().toString(), type: activeTab, item, qty, price, user: 'Me' };
-      setPosts([newPost, ...posts]);
+  const showAlert = (title: string, message: string, type: 'success' | 'error' | 'info') => setAlertConfig({ visible: true, title, message, type });
+
+  useEffect(() => {
+    const q = query(collection(db, 'flash_sales'), orderBy('createdAt', 'desc'));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      setSales(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      setLoading(false);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  const handlePostSale = async () => {
+    if (!itemName || !price || !quantity) {
+      showAlert("Missing Info", "Please fill out all fields.", "error"); return;
+    }
+    try {
+      await addDoc(collection(db, 'flash_sales'), {
+        sellerId: user?.uid, sellerEmail: user?.email, itemName, price: parseFloat(price), quantity, status: 'ACTIVE', createdAt: new Date()
+      });
+      setItemName(''); setPrice(''); setQuantity('');
       setModalVisible(false);
-      Alert.alert("Success", "Your listing is live!");
+      showAlert("Live!", "Your item is now on the market.", "success");
+    } catch (error) {
+      showAlert("Error", "Could not post sale.", "error");
+    }
   };
 
-  // Filter: If I am on 'Buy' tab, show me 'Sell' posts (people selling things I want)
-  const filteredPosts = posts.filter(p => p.type === (activeTab === 'buy' ? 'sell' : 'buy'));
+  const handleBuy = async (item: any) => {
+    try {
+        const saleRef = doc(db, 'flash_sales', item.id);
+        await updateDoc(saleRef, { status: 'SOLD', buyerId: user?.uid, buyerEmail: user?.email });
+        showAlert("Success!", "You have purchased this item securely.", "success");
+    } catch (error) {
+        showAlert("Error", "Could not process the purchase.", "error");
+    }
+  };
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.background }]}>
       <View style={styles.header}>
-        <Text style={styles.title}>{t('flash_sale')}</Text>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={[styles.backBtn, { backgroundColor: theme.surface }]}>
+          <Feather name="arrow-left" size={24} color={theme.text} />
+        </TouchableOpacity>
+        <Text style={[styles.title, { color: theme.text }]}>Marketplace</Text>
         <TouchableOpacity style={styles.addBtn} onPress={() => setModalVisible(true)}>
-            <Feather name="plus" size={24} color="#fff" />
+            <Feather name="plus" size={20} color="#fff" />
         </TouchableOpacity>
       </View>
 
-      <View style={styles.tabs}>
-        <TouchableOpacity style={[styles.tab, activeTab === 'buy' && styles.activeTab]} onPress={() => setActiveTab('buy')}>
-            <Text style={[styles.tabText, activeTab === 'buy' && styles.activeTabText]}>{t('fs_buy')}</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={[styles.tab, activeTab === 'sell' && styles.activeTab]} onPress={() => setActiveTab('sell')}>
-            <Text style={[styles.tabText, activeTab === 'sell' && styles.activeTabText]}>{t('fs_sell')}</Text>
-        </TouchableOpacity>
-      </View>
-
-      <FlatList 
-        data={filteredPosts}
-        keyExtractor={item => item.id}
-        renderItem={({item}) => (
-            <View style={styles.card}>
-                <View style={styles.cardHeader}>
-                    <Text style={styles.cardTitle}>{item.item}</Text>
-                    <Text style={styles.cardPrice}>₹{item.price}</Text>
+      {loading ? (
+        <ActivityIndicator size="large" color={theme.accent} style={{ marginTop: 50 }} />
+      ) : (
+        <FlatList
+          data={sales}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={{ padding: 20, paddingBottom: 100 }}
+          renderItem={({ item }) => {
+            const isSold = item.status === 'SOLD';
+            return (
+              <View style={[styles.saleCard, { backgroundColor: theme.surface, borderColor: theme.border }, isSold && { opacity: 0.6 }]}>
+                <View style={styles.saleHeader}>
+                    <View style={styles.iconCircle}>
+                        <Ionicons name="basket" size={20} color="#EC4899" />
+                    </View>
+                    <View style={{flex: 1, marginLeft: 12}}>
+                        <Text style={[styles.itemName, { color: theme.text }, isSold && { textDecorationLine: 'line-through' }]}>{item.itemName}</Text>
+                        <Text style={[styles.sellerName, { color: theme.subText }]}>by {item.sellerEmail?.split('@')[0]}</Text>
+                    </View>
+                    <Text style={[styles.price, { color: theme.success }]}>₹{item.price}</Text>
                 </View>
-                <Text style={styles.cardDetail}>Qty: {item.qty}</Text>
-                <Text style={styles.cardUser}>Posted by: {item.user}</Text>
-                <TouchableOpacity style={styles.contactBtn} onPress={() => Alert.alert("Contact", `Calling ${item.user}...`)}>
-                    <Text style={styles.contactText}>Contact</Text>
-                </TouchableOpacity>
-            </View>
-        )}
-      />
+                
+                <View style={[styles.saleFooter, { borderTopColor: theme.border }]}>
+                    <Text style={[styles.quantityBadge, { backgroundColor: theme.background, color: theme.text }]}>{item.quantity}</Text>
+                    <TouchableOpacity 
+                        disabled={isSold || item.sellerId === user?.uid}
+                        style={[styles.buyBtn, (isSold || item.sellerId === user?.uid) ? { backgroundColor: theme.border } : { backgroundColor: theme.primary }]} 
+                        onPress={() => handleBuy(item)}
+                    >
+                        <Text style={[styles.buyBtnText, (isSold || item.sellerId === user?.uid) ? { color: theme.subText } : { color: theme.primaryText }]}>
+                        {isSold ? (item.buyerId === user?.uid ? 'Purchased' : 'Sold Out') : (item.sellerId === user?.uid ? 'Your Item' : 'Buy Now')}
+                        </Text>
+                    </TouchableOpacity>
+                </View>
+              </View>
+            );
+          }}
+        />
+      )}
 
-      {/* Add Modal */}
       <Modal visible={modalVisible} animationType="slide" transparent>
+        <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{flex: 1}}>
           <View style={styles.modalOverlay}>
-              <View style={styles.modalContent}>
-                  <Text style={styles.modalTitle}>New Listing ({activeTab.toUpperCase()})</Text>
-                  <TextInput style={styles.input} placeholder={t('fs_item')} value={item} onChangeText={setItem} />
-                  <TextInput style={styles.input} placeholder={t('fs_qty')} value={qty} onChangeText={setQty} />
-                  <TextInput style={styles.input} placeholder={t('fs_price')} keyboardType="numeric" value={price} onChangeText={setPrice} />
-                  <View style={{flexDirection: 'row', gap: 10}}>
-                    <TouchableOpacity style={[styles.modalBtn, {backgroundColor: '#ccc'}]} onPress={() => setModalVisible(false)}>
-                        <Text>Cancel</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={[styles.modalBtn, {backgroundColor: COLORS.primary}]} onPress={handlePost}>
-                        <Text style={{color: '#fff'}}>{t('fs_post')}</Text>
-                    </TouchableOpacity>
-                  </View>
+              <View style={[styles.modalContent, { backgroundColor: theme.surface }]}>
+                  <Text style={[styles.modalTitle, { color: theme.text }]}>Sell Goods</Text>
+                  <TextInput style={[styles.input, { backgroundColor: theme.background, borderColor: theme.border, color: theme.text }]} placeholderTextColor={theme.subText} placeholder="Item Name (e.g., Wheat)" value={itemName} onChangeText={setItemName} />
+                  <TextInput style={[styles.input, { backgroundColor: theme.background, borderColor: theme.border, color: theme.text }]} placeholderTextColor={theme.subText} placeholder="Price (₹)" keyboardType="numeric" value={price} onChangeText={setPrice} />
+                  <TextInput style={[styles.input, { backgroundColor: theme.background, borderColor: theme.border, color: theme.text }]} placeholderTextColor={theme.subText} placeholder="Quantity (e.g., 50kg)" value={quantity} onChangeText={setQuantity} />
+                  <TouchableOpacity style={[styles.modalBtn, { backgroundColor: theme.primary }]} onPress={handlePostSale}>
+                      <Text style={{color: theme.primaryText, fontWeight: '800', fontSize: 16}}>Post to Market</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={{marginTop: 15, alignSelf: 'center', padding: 10}} onPress={() => setModalVisible(false)}>
+                      <Text style={{color: theme.danger, fontWeight: '700', fontSize: 16}}>Cancel</Text>
+                  </TouchableOpacity>
               </View>
           </View>
+        </KeyboardAvoidingView>
       </Modal>
-    </View>
+      <CustomAlert visible={alertConfig.visible} title={alertConfig.title} message={alertConfig.message} type={alertConfig.type} onClose={() => setAlertConfig({...alertConfig, visible: false})} />
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f5f5f5' },
-  header: { padding: 20, paddingTop: 50, backgroundColor: COLORS.primary, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  title: { fontSize: 22, fontWeight: 'bold', color: '#fff' },
-  addBtn: { padding: 5 },
-  tabs: { flexDirection: 'row', backgroundColor: '#fff', elevation: 2 },
-  tab: { flex: 1, padding: 15, alignItems: 'center', borderBottomWidth: 3, borderBottomColor: 'transparent' },
-  activeTab: { borderBottomColor: COLORS.primary },
-  tabText: { fontWeight: 'bold', color: '#888' },
-  activeTabText: { color: COLORS.primary },
-  card: { backgroundColor: '#fff', margin: 10, padding: 15, borderRadius: 10, elevation: 2 },
-  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 5 },
-  cardTitle: { fontSize: 18, fontWeight: 'bold' },
-  cardPrice: { fontSize: 18, fontWeight: 'bold', color: 'green' },
-  cardDetail: { color: '#666' },
-  cardUser: { fontSize: 12, color: '#aaa', marginTop: 5 },
-  contactBtn: { marginTop: 10, backgroundColor: COLORS.primary, padding: 10, borderRadius: 5, alignItems: 'center' },
-  contactText: { color: '#fff', fontWeight: 'bold' },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 20 },
-  modalContent: { backgroundColor: '#fff', padding: 20, borderRadius: 10 },
-  modalTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 20 },
-  input: { borderWidth: 1, borderColor: '#ddd', padding: 10, borderRadius: 5, marginBottom: 10 },
-  modalBtn: { flex: 1, padding: 15, borderRadius: 5, alignItems: 'center' }
+  safeArea: { flex: 1 },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, paddingTop: Platform.OS === 'android' ? 40 : 20 },
+  backBtn: { padding: 8, borderRadius: 12, elevation: 2 },
+  title: { fontSize: 20, fontWeight: '800' },
+  addBtn: { padding: 10, backgroundColor: '#EC4899', borderRadius: 12, elevation: 2 },
+  saleCard: { padding: 20, borderRadius: 24, marginBottom: 16, elevation: 3, borderWidth: 1 },
+  saleHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
+  iconCircle: { width: 40, height: 40, borderRadius: 12, backgroundColor: '#FDF2F8', justifyContent: 'center', alignItems: 'center' },
+  itemName: { fontSize: 18, fontWeight: '800' },
+  sellerName: { fontSize: 13, marginTop: 2 },
+  price: { fontSize: 22, fontWeight: '800' },
+  saleFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: 16, borderTopWidth: 1 },
+  quantityBadge: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12, fontWeight: '700', fontSize: 12 },
+  buyBtn: { paddingHorizontal: 20, paddingVertical: 10, borderRadius: 12 },
+  buyBtnText: { fontWeight: '700' },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
+  modalContent: { padding: 30, borderTopLeftRadius: 32, borderTopRightRadius: 32 },
+  modalTitle: { fontSize: 24, fontWeight: '800', marginBottom: 24 },
+  input: { borderWidth: 1, padding: 16, borderRadius: 16, marginBottom: 16, fontSize: 16, fontWeight: '600' },
+  modalBtn: { padding: 18, borderRadius: 16, alignItems: 'center', marginTop: 10 }
 });

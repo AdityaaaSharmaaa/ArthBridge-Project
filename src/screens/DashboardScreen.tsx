@@ -1,189 +1,157 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, RefreshControl } from 'react-native';
-import { Feather, Ionicons } from '@expo/vector-icons';
-import { COLORS } from '../theme/colors';
-import { useTranslation } from 'react-i18next';
-import { RealmContextObj } from '../models/RealmContext';
-import { calculateScore } from '../utils/ScoreCalculator';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Platform, Alert } from 'react-native';
+import { Feather, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { ProfileModal } from '../components/ProfileModal';
-import { SearchModal } from '../components/SearchModal';
+import { useAuth } from '../context/AuthContext';
+import { RealmContextObj } from '../models/RealmContext';
+import { useTheme } from '../context/ThemeContext';
 
 const { useQuery } = RealmContextObj;
 
 export const DashboardScreen = ({ navigation }: any) => {
-  const { t } = useTranslation();
+  const { user } = useAuth();
+  const { theme } = useTheme(); 
   const transactions = useQuery('Transaction');
-  const [refreshing, setRefreshing] = useState(false);
   const [profileVisible, setProfileVisible] = useState(false);
-  const [searchVisible, setSearchVisible] = useState(false);
-  const score = calculateScore(transactions);
 
-  const onRefresh = () => { setRefreshing(true); setTimeout(() => setRefreshing(false), 1000); };
-
-  // --- NAVIGATION MAP ---
-  const gotoScan = () => navigation.navigate('Pay', { mode: 'scan' }); // Only Scan
-  const gotoOffline = () => navigation.navigate('Pay', { mode: 'code' }); // Only Code
-  const gotoContacts = () => navigation.navigate('Contacts'); // New: Pay Phone
-  const gotoBank = () => navigation.navigate('BankTransfer'); // New: Bank Form
-  const gotoLedger = () => navigation.navigate('Ledger');
-  const gotoMFI = () => navigation.navigate('MFI');
-  const gotoFlashSale = () => navigation.navigate('FlashSale');
-  const gotoSahayata = () => navigation.navigate('Sahayata');
+  let balance = 0; let txCount = transactions.length;
+  transactions.forEach((tx: any) => {
+    if (tx.type === 'debit') balance += tx.amount; 
+    if (tx.type === 'credit') balance -= tx.amount; 
+  });
+  const displayBalance = `₹${Math.max(0, balance).toFixed(2)}`;
+  
+  const trustScore = Math.min(850, 650 + (txCount * 5)); 
+  const scoreColor = trustScore > 750 ? theme.success : (trustScore > 650 ? theme.warning : theme.danger);
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.searchBar} onPress={() => setSearchVisible(true)}>
-          <Feather name="search" size={20} color="#999" />
-          <Text style={styles.searchText}>{t('search_placeholder')}</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.profileBtn} onPress={() => setProfileVisible(true)}>
-          <Text style={styles.profileInitials}>U</Text>
-        </TouchableOpacity>
-      </View>
-
-      <ScrollView contentContainerStyle={styles.scrollContent} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
-        <View style={styles.heroSection}>
-          <Text style={styles.greeting}>Welcome, User</Text>
-          <View style={styles.scoreCard}>
-             <View style={styles.scoreCircle}><Text style={styles.scoreVal}>{score}</Text></View>
-             <View style={{flex: 1}}>
-               <Text style={styles.scoreLabel}>{t('credit_score')}</Text>
-               <Text style={styles.scoreMsg}>{score > 700 ? "Excellent Score" : "Keep improving"}</Text>
-             </View>
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.background }]}>
+      <View style={styles.container}>
+        
+        <View style={[styles.header, { backgroundColor: theme.background }]}>
+          <View>
+            <Text style={[styles.greeting, { color: theme.subText }]}>Good Morning,</Text>
+            <Text style={[styles.userName, { color: theme.text }]}>{user?.email?.split('@')[0] || 'User'}</Text>
           </View>
+          <TouchableOpacity onPress={() => setProfileVisible(true)} style={[styles.avatarBtn, { backgroundColor: theme.surface, borderColor: theme.border, borderWidth: 1 }]}>
+            <Text style={[styles.avatarText, { color: theme.text }]}>{user?.email?.charAt(0).toUpperCase() || 'U'}</Text>
+          </TouchableOpacity>
         </View>
 
-        {/* ACTIONS */}
-        <View style={styles.gridContainer}>
-           <TouchableOpacity style={styles.actionBtn} onPress={gotoScan}>
-              <View style={styles.iconBox}><Ionicons name="qr-code" size={24} color={COLORS.primary} /></View>
-              <Text style={styles.actionText}>{t('scan_qr')}</Text>
-           </TouchableOpacity>
-           
-           <TouchableOpacity style={styles.actionBtn} onPress={gotoContacts}>
-              <View style={styles.iconBox}><Feather name="smartphone" size={24} color={COLORS.primary} /></View>
-              <Text style={styles.actionText}>{t('pay_phone')}</Text>
-           </TouchableOpacity>
-
-           <TouchableOpacity style={styles.actionBtn} onPress={gotoOffline}>
-              <View style={[styles.iconBox, {backgroundColor: '#FFEBEE', borderColor: '#FFCDD2'}]}>
-                <Feather name="wifi-off" size={24} color={COLORS.danger} />
-              </View>
-              <Text style={styles.actionText}>{t('offline_code')}</Text>
-           </TouchableOpacity>
-
-           <TouchableOpacity style={styles.actionBtn} onPress={gotoBank}>
-              <View style={styles.iconBox}><Feather name="home" size={24} color={COLORS.primary} /></View>
-              <Text style={styles.actionText}>{t('bank_transfer')}</Text>
-           </TouchableOpacity>
-        </View>
-
-        {/* MARKETPLACE SECTION */}
-        <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Marketplace</Text>
-            <View style={{flexDirection: 'row', gap: 15}}>
-                <TouchableOpacity style={[styles.marketCard, {backgroundColor: '#E3F2FD'}]} onPress={gotoFlashSale}>
-                    <Feather name="zap" size={24} color={COLORS.primary} />
-                    <Text style={styles.marketTitle}>{t('flash_sale')}</Text>
-                    <Text style={styles.marketSub}>Buy & Sell Crops</Text>
+        <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 100 }} showsVerticalScrollIndicator={false}>
+          
+          <View style={[styles.banner, { backgroundColor: theme.primary }]}>
+            <View style={styles.bannerTopRow}>
+                <Text style={styles.bannerTitle}>ArthBridge Balance</Text>
+                <Ionicons name="shield-checkmark" size={20} color="#4CAF50" />
+            </View>
+            <Text style={[styles.bannerAmount, { color: theme.primaryText }]}>{displayBalance}</Text>
+            <View style={styles.bannerActionRow}>
+                <TouchableOpacity style={[styles.bannerBtnPrimary, { backgroundColor: theme.primaryText }]} onPress={() => navigation.navigate('Wallet')}>
+                    <Text style={[styles.bannerBtnTextPrimary, { color: theme.primary }]}>Add Money</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={[styles.marketCard, {backgroundColor: '#FFF3E0'}]} onPress={gotoSahayata}>
-                    <Feather name="users" size={24} color={COLORS.accent} />
-                    <Text style={styles.marketTitle}>{t('sahayata')}</Text>
-                    <Text style={styles.marketSub}>Community Help</Text>
+                <TouchableOpacity style={styles.bannerBtnSecondary} onPress={() => navigation.navigate('Pay')}>
+                    <Text style={styles.bannerBtnTextSecondary}>Pay Offline</Text>
                 </TouchableOpacity>
             </View>
-        </View>
+          </View>
 
-        {/* LEDGER PREVIEW */}
-        <View style={styles.section}>
-           <Text style={styles.sectionTitle}>{t('ledger')}</Text>
-           <View style={styles.ledgerCard}>
-              {transactions.slice(0, 2).map((tx: any) => (
-                <View key={tx._id.toString()} style={styles.txItem}>
-                   <View style={[styles.txAvatar, { backgroundColor: tx.type === 'credit' ? COLORS.danger : COLORS.success }]}>
-                      <Text style={{color: '#fff', fontWeight: 'bold'}}>{tx.type === 'credit' ? 'G' : 'R'}</Text>
-                   </View>
-                   <View style={{flex: 1, marginLeft: 10}}>
-                      <Text style={styles.txDesc}>{tx.description || "Unknown"}</Text>
-                      <Text style={styles.txDate}>{new Date(tx.date).toLocaleDateString()}</Text>
-                   </View>
-                   <Text style={[styles.txAmt, { color: tx.type === 'credit' ? COLORS.danger : COLORS.success }]}>
-                      ₹{tx.amount}
-                   </Text>
-                </View>
-              ))}
-              <TouchableOpacity style={styles.showAllBtn} onPress={gotoLedger}>
-                 <Text style={styles.showAllText}>Show History</Text>
-                 <Feather name="chevron-right" size={16} color={COLORS.primary} />
-              </TouchableOpacity>
-           </View>
-        </View>
+          <View style={[styles.trustScoreCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+              <View style={styles.trustScoreHeader}>
+                  <MaterialCommunityIcons name="shield-star" size={24} color={scoreColor} />
+                  <Text style={[styles.trustScoreTitle, { color: theme.text }]}>ArthBridge Trust Score</Text>
+              </View>
+              <View style={styles.trustScoreRow}>
+                  <Text style={[styles.trustScoreValue, { color: scoreColor }]}>{trustScore}</Text>
+                  <View style={[styles.trustScoreBadge, { backgroundColor: theme.background, borderColor: theme.border }]}>
+                      <Text style={[styles.trustScoreBadgeText, { color: theme.text }]}>
+                          {trustScore > 750 ? 'Excellent' : (trustScore > 650 ? 'Good' : 'Needs Work')}
+                      </Text>
+                  </View>
+              </View>
+              <View style={[styles.progressBarBg, { backgroundColor: theme.cardAlt }]}>
+                  <View style={[styles.progressBarFill, { width: `${(trustScore / 850) * 100}%`, backgroundColor: scoreColor }]} />
+              </View>
+          </View>
 
-        {/* OFFERS */}
-        <View style={[styles.section, {marginBottom: 100}]}>
-           <Text style={styles.sectionTitle}>{t('mfi_title')}</Text>
-           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{gap: 15, paddingRight: 20}}>
-              <TouchableOpacity style={styles.offerCard} onPress={gotoMFI}>
-                 <View style={styles.offerIcon}><Feather name="dollar-sign" size={20} color="#fff" /></View>
-                 <View><Text style={styles.offerTitle}>₹50,000 Loan</Text><Text style={styles.offerSub}>Pre-approved</Text></View>
-              </TouchableOpacity>
-              <TouchableOpacity style={[styles.offerCard, {backgroundColor: '#FFF8E1', borderColor: '#FFE082'}]} onPress={gotoMFI}>
-                 <View style={[styles.offerIcon, {backgroundColor: COLORS.accent}]}><Feather name="trending-up" size={20} color="#fff" /></View>
-                 <View><Text style={[styles.offerTitle, {color: '#F57F17'}]}>Kisan Credit</Text><Text style={[styles.offerSub, {color: '#8D6E63'}]}>Apply Now</Text></View>
-              </TouchableOpacity>
-           </ScrollView>
-        </View>
-      </ScrollView>
+          <Text style={[styles.sectionTitle, { color: theme.text }]}>Quick Access</Text>
+          <View style={styles.grid}>
+            <ActionBox theme={theme} icon="scan" title="Scan QR" color={theme.success} onPress={() => navigation.navigate('Scanner')} />
+            <ActionBox theme={theme} icon="qr-code" title="My QR" color={theme.accent} onPress={() => navigation.navigate('Receive')} />
+            <ActionBox theme={theme} icon="book" title="Passbook" color={theme.warning} onPress={() => navigation.navigate('Ledger')} />
+            <ActionBox theme={theme} icon="send" title="Send" color="#8B5CF6" onPress={() => Alert.alert("Coming Soon")} />
+          </View>
 
-      <TouchableOpacity style={styles.fab} onPress={gotoScan}>
-         <Feather name="plus" size={24} color="#fff" />
-         <Text style={styles.fabText}>{t('new_payment')}</Text>
-      </TouchableOpacity>
+          {/* MISSING SECTION RESTORED HERE */}
+          <Text style={[styles.sectionTitle, { color: theme.text }]}>Village Ecosystem</Text>
+          <View style={styles.servicesContainer}>
+            <ServiceCard theme={theme} icon="shopping-bag" title="Village Marketplace" subtitle="Buy and sell surplus crops locally" color="#EC4899" onPress={() => navigation.navigate('FlashSale')} />
+            <ServiceCard theme={theme} icon="users" title="Community Co-op" subtitle="Lend or request micro-loans securely" color="#06B6D4" onPress={() => navigation.navigate('Sahayata')} />
+          </View>
 
-      <ProfileModal visible={profileVisible} onClose={() => setProfileVisible(false)} navigation={navigation} />
-      <SearchModal visible={searchVisible} onClose={() => setSearchVisible(false)} navigation={navigation} />
-    </View>
+        </ScrollView>
+        <ProfileModal visible={profileVisible} onClose={() => setProfileVisible(false)} navigation={navigation} />
+      </View>
+    </SafeAreaView>
   );
 };
 
+const ActionBox = ({ icon, title, color, onPress, theme }: any) => (
+  <TouchableOpacity style={styles.actionBox} onPress={onPress}>
+    <View style={[styles.iconCircle, { backgroundColor: color + '20' }]}>
+      <Ionicons name={icon} size={26} color={color} />
+    </View>
+    <Text style={[styles.actionText, { color: theme.subText }]}>{title}</Text>
+  </TouchableOpacity>
+);
+
+const ServiceCard = ({ icon, title, subtitle, color, onPress, theme }: any) => (
+  <TouchableOpacity style={[styles.serviceCard, { backgroundColor: theme.surface, borderColor: theme.border }]} onPress={onPress}>
+    <View style={[styles.serviceIcon, { backgroundColor: color + '15' }]}>
+      <Feather name={icon} size={24} color={color} />
+    </View>
+    <View style={styles.serviceTextContainer}>
+      <Text style={[styles.serviceTitle, { color: theme.text }]}>{title}</Text>
+      <Text style={[styles.serviceSub, { color: theme.subText }]}>{subtitle}</Text>
+    </View>
+    <Feather name="chevron-right" size={20} color={theme.subText} />
+  </TouchableOpacity>
+);
+
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff' },
-  header: { flexDirection: 'row', paddingHorizontal: 16, paddingTop: 50, paddingBottom: 15, alignItems: 'center', gap: 10, elevation: 2, backgroundColor: '#fff' },
-  searchBar: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: '#F5F5F5', padding: 10, borderRadius: 25, gap: 10, borderWidth: 1, borderColor: '#E0E0E0' },
-  searchText: { color: '#999' },
-  profileBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: COLORS.primary, alignItems: 'center', justifyContent: 'center' },
-  profileInitials: { color: '#fff', fontWeight: 'bold' },
-  scrollContent: { paddingBottom: 20 },
-  heroSection: { padding: 20, backgroundColor: '#E8EAF6' },
-  greeting: { fontSize: 22, fontWeight: 'bold', color: COLORS.primary, marginBottom: 15 },
-  scoreCard: { backgroundColor: COLORS.primary, borderRadius: 20, padding: 20, flexDirection: 'row', alignItems: 'center', gap: 20, elevation: 5 },
-  scoreCircle: { width: 70, height: 70, borderRadius: 35, borderWidth: 4, borderColor: COLORS.accent, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.1)' },
-  scoreVal: { color: '#fff', fontWeight: 'bold', fontSize: 24 },
-  scoreLabel: { color: '#BBDEFB', textTransform: 'uppercase', fontSize: 10, fontWeight: 'bold' },
-  scoreMsg: { color: '#fff', fontSize: 13, marginTop: 4, flexWrap: 'wrap' },
-  gridContainer: { flexDirection: 'row', flexWrap: 'wrap', padding: 20, justifyContent: 'space-between' },
-  actionBtn: { width: '22%', alignItems: 'center', gap: 8 },
-  iconBox: { width: 50, height: 50, borderRadius: 25, backgroundColor: '#E3F2FD', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#BBDEFB' },
-  actionText: { fontSize: 10, color: '#333', textAlign: 'center', fontWeight: '600' },
-  section: { paddingHorizontal: 20, marginTop: 10 },
-  sectionTitle: { fontSize: 16, fontWeight: 'bold', color: '#333', marginBottom: 10 },
-  ledgerCard: { backgroundColor: '#fff', borderRadius: 15, borderWidth: 1, borderColor: '#eee' },
-  txItem: { flexDirection: 'row', alignItems: 'center', padding: 15, borderBottomWidth: 1, borderBottomColor: '#f5f5f5' },
-  txAvatar: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
-  txDesc: { fontWeight: 'bold', color: '#333' },
-  txDate: { fontSize: 10, color: '#888' },
-  txAmt: { fontWeight: 'bold' },
-  showAllBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 15, gap: 5 },
-  showAllText: { color: COLORS.primary, fontWeight: 'bold', fontSize: 12 },
-  marketCard: { flex: 1, padding: 20, borderRadius: 15, alignItems: 'center', gap: 5 },
-  marketTitle: { fontWeight: 'bold', fontSize: 16, marginTop: 5 },
-  marketSub: { fontSize: 10, color: '#666' },
-  offerCard: { width: 150, height: 110, backgroundColor: '#E8F5E9', borderRadius: 15, padding: 15, justifyContent: 'space-between', borderWidth: 1, borderColor: '#C8E6C9' },
-  offerIcon: { width: 30, height: 30, borderRadius: 15, backgroundColor: COLORS.success, alignItems: 'center', justifyContent: 'center' },
-  offerTitle: { fontWeight: 'bold', color: COLORS.success, fontSize: 14 },
-  offerSub: { fontSize: 10, color: 'green' },
-  fab: { position: 'absolute', bottom: 30, right: 20, flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.primary, paddingVertical: 12, paddingHorizontal: 20, borderRadius: 30, elevation: 6, gap: 10 },
-  fabText: { color: '#fff', fontWeight: 'bold' }
+  safeArea: { flex: 1 }, container: { flex: 1 },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingTop: Platform.OS === 'android' ? 40 : 20, paddingBottom: 20 },
+  greeting: { fontSize: 14, fontWeight: '500' },
+  userName: { fontSize: 24, fontWeight: '800', marginTop: 2 },
+  avatarBtn: { width: 50, height: 50, borderRadius: 25, justifyContent: 'center', alignItems: 'center', elevation: 5 },
+  avatarText: { fontSize: 20, fontWeight: 'bold' },
+  banner: { padding: 24, borderRadius: 24, elevation: 8 },
+  bannerTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  bannerTitle: { color: '#94A3B8', fontSize: 14, fontWeight: '600' },
+  bannerAmount: { fontSize: 42, fontWeight: '800', marginVertical: 12, letterSpacing: -1 },
+  bannerActionRow: { flexDirection: 'row', gap: 12, marginTop: 10 },
+  bannerBtnPrimary: { flex: 1, paddingVertical: 14, borderRadius: 16, alignItems: 'center' },
+  bannerBtnTextPrimary: { fontWeight: '700', fontSize: 15 },
+  bannerBtnSecondary: { flex: 1, backgroundColor: 'rgba(255,255,255,0.1)', paddingVertical: 14, borderRadius: 16, alignItems: 'center' },
+  bannerBtnTextSecondary: { color: '#FFFFFF', fontWeight: '700', fontSize: 15 },
+  trustScoreCard: { marginTop: 20, padding: 20, borderRadius: 24, borderWidth: 1, elevation: 2 },
+  trustScoreHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
+  trustScoreTitle: { flex: 1, fontSize: 16, fontWeight: '700', marginLeft: 8 },
+  trustScoreRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 },
+  trustScoreValue: { fontSize: 36, fontWeight: '900', letterSpacing: -1 },
+  trustScoreBadge: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12, borderWidth: 1 },
+  trustScoreBadgeText: { fontSize: 12, fontWeight: '700', textTransform: 'uppercase' },
+  progressBarBg: { height: 8, borderRadius: 4, overflow: 'hidden', marginBottom: 4 },
+  progressBarFill: { height: '100%', borderRadius: 4 },
+  sectionTitle: { fontSize: 18, fontWeight: '800', marginTop: 32, marginBottom: 16 },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
+  actionBox: { width: '22%', alignItems: 'center' },
+  iconCircle: { width: 64, height: 64, borderRadius: 20, justifyContent: 'center', alignItems: 'center', marginBottom: 10 },
+  actionText: { fontSize: 13, textAlign: 'center', fontWeight: '600' },
+  servicesContainer: { gap: 12 },
+  serviceCard: { flexDirection: 'row', alignItems: 'center', padding: 16, borderRadius: 20, borderWidth: 1, elevation: 1 },
+  serviceIcon: { width: 50, height: 50, borderRadius: 16, justifyContent: 'center', alignItems: 'center' },
+  serviceTextContainer: { flex: 1, marginLeft: 16 },
+  serviceTitle: { fontSize: 16, fontWeight: '700', marginBottom: 4 },
+  serviceSub: { fontSize: 13 }
 });

@@ -1,84 +1,95 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Feather } from '@expo/vector-icons';
 import { COLORS } from '../theme/colors';
 
 export const PinScreen = ({ navigation }: any) => {
-  const [pin, setPin] = useState(['', '', '', '']);
+  const [pin, setPin] = useState('');
+  const [savedPin, setSavedPin] = useState<string | null>(null);
+  const [mode, setMode] = useState<'SETUP' | 'VERIFY'>('VERIFY');
 
-  const handlePress = (num: string) => {
-    const nextIndex = pin.findIndex(p => p === '');
-    if (nextIndex !== -1) {
-      const newPin = [...pin];
-      newPin[nextIndex] = num;
+  useEffect(() => {
+    checkPinStatus();
+  }, []);
+
+  const checkPinStatus = async () => {
+    const storedPin = await AsyncStorage.getItem('@user_pin');
+    if (!storedPin) {
+      setMode('SETUP'); // First time login
+    } else {
+      setSavedPin(storedPin);
+      setMode('VERIFY'); // Returning user
+    }
+  };
+
+  const handlePress = async (num: string) => {
+    if (pin.length < 4) {
+      const newPin = pin + num;
       setPin(newPin);
       
-      // Auto navigate when full
-      if (nextIndex === 3) {
-        setTimeout(() => navigation.replace('Dashboard'), 300);
+      if (newPin.length === 4) {
+        if (mode === 'SETUP') {
+          // Save the new PIN securely
+          await AsyncStorage.setItem('@user_pin', newPin);
+          Alert.alert("Success", "PIN Set Successfully!");
+          navigation.replace('Dashboard');
+        } else {
+          // Verify against saved PIN
+          if (newPin === savedPin) {
+            navigation.replace('Dashboard');
+          } else {
+            Alert.alert("Error", "Incorrect PIN!");
+            setPin(''); // Reset on fail
+          }
+        }
       }
     }
   };
 
-  const handleClear = () => setPin(['', '', '', '']);
+  const handleDelete = () => setPin(pin.slice(0, -1));
 
   return (
     <View style={styles.container}>
-      <View style={styles.topSection}>
-        <View style={styles.iconCircle}>
-          <Feather name="lock" size={24} color="#fff" />
-        </View>
-        <Text style={styles.title}>Enter PIN</Text>
-        <View style={styles.dotsContainer}>
-          {pin.map((p, i) => (
-            <View key={i} style={[styles.dot, p ? styles.dotFilled : null]} />
-          ))}
-        </View>
+      <View style={styles.header}>
+        <Feather name="shield" size={40} color={COLORS.primary} />
+        <Text style={styles.title}>{mode === 'SETUP' ? 'Create a 4-Digit PIN' : 'Enter Your Secure PIN'}</Text>
+        <Text style={styles.subtitle}>{mode === 'SETUP' ? 'This keeps your offline wallet safe.' : 'Unlock your wallet'}</Text>
       </View>
 
-      <View style={styles.numpad}>
-        <View style={styles.row}>
-          {[1, 2, 3].map(n => (
-            <TouchableOpacity key={n} style={styles.numBtn} onPress={() => handlePress(n.toString())}>
-              <Text style={styles.numText}>{n}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-        <View style={styles.row}>
-          {[4, 5, 6].map(n => (
-            <TouchableOpacity key={n} style={styles.numBtn} onPress={() => handlePress(n.toString())}>
-              <Text style={styles.numText}>{n}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-        <View style={styles.row}>
-          {[7, 8, 9].map(n => (
-            <TouchableOpacity key={n} style={styles.numBtn} onPress={() => handlePress(n.toString())}>
-              <Text style={styles.numText}>{n}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-        <View style={styles.row}>
-          <TouchableOpacity style={styles.numBtn} onPress={handleClear}><Text style={styles.clearText}>CLR</Text></TouchableOpacity>
-          <TouchableOpacity style={styles.numBtn} onPress={() => handlePress('0')}><Text style={styles.numText}>0</Text></TouchableOpacity>
-          <View style={styles.numBtn} /> 
-        </View>
+      <View style={styles.dotsContainer}>
+        {[1, 2, 3, 4].map((i) => (
+          <View key={i} style={[styles.dot, pin.length >= i && styles.dotActive]} />
+        ))}
+      </View>
+
+      <View style={styles.keypad}>
+        {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((num) => (
+          <TouchableOpacity key={num} style={styles.key} onPress={() => handlePress(num)}>
+            <Text style={styles.keyText}>{num}</Text>
+          </TouchableOpacity>
+        ))}
+        <View style={styles.key} />
+        <TouchableOpacity style={styles.key} onPress={() => handlePress('0')}>
+          <Text style={styles.keyText}>0</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.key} onPress={handleDelete}>
+          <Feather name="delete" size={24} color="#333" />
+        </TouchableOpacity>
       </View>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: COLORS.primary },
-  topSection: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  iconCircle: { width: 60, height: 60, backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 30, alignItems: 'center', justifyContent: 'center', marginBottom: 20 },
-  title: { color: '#fff', fontSize: 20, fontWeight: 'bold', marginBottom: 30 },
-  dotsContainer: { flexDirection: 'row', gap: 15 },
-  dot: { width: 16, height: 16, borderRadius: 8, borderWidth: 2, borderColor: '#fff' },
-  dotFilled: { backgroundColor: '#fff' },
-  numpad: { backgroundColor: '#fff', borderTopLeftRadius: 30, borderTopRightRadius: 30, padding: 30, paddingBottom: 50 },
-  row: { flexDirection: 'row', justifyContent: 'space-around', marginBottom: 20 },
-  numBtn: { width: 70, height: 70, alignItems: 'center', justifyContent: 'center', borderRadius: 35 },
-  numText: { fontSize: 28, color: COLORS.primary, fontWeight: 'bold' },
-  clearText: { color: COLORS.danger, fontWeight: 'bold' }
+  container: { flex: 1, backgroundColor: '#fff', justifyContent: 'center', alignItems: 'center' },
+  header: { alignItems: 'center', marginBottom: 50 },
+  title: { fontSize: 24, fontWeight: 'bold', color: '#333', marginTop: 15 },
+  subtitle: { fontSize: 14, color: '#666', marginTop: 5 },
+  dotsContainer: { flexDirection: 'row', marginBottom: 60 },
+  dot: { width: 15, height: 15, borderRadius: 10, borderWidth: 1, borderColor: COLORS.primary, marginHorizontal: 10 },
+  dotActive: { backgroundColor: COLORS.primary },
+  keypad: { width: '80%', flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center' },
+  key: { width: '30%', aspectRatio: 1, justifyContent: 'center', alignItems: 'center', margin: '1.5%', borderRadius: 50, backgroundColor: '#f5f5f5' },
+  keyText: { fontSize: 24, fontWeight: 'bold', color: '#333' }
 });

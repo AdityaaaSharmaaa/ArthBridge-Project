@@ -1,94 +1,71 @@
-import React, { createContext, useContext, useState } from 'react';
+import React, { createContext, useContext, useState, useEffect } from 'react';
+import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
+import { db } from '../config/firebase';
+import { useAuth } from '../context/AuthContext'; // 1. IMPORT AUTH
 
-// --- 1. THE MOCK DATABASE (Memory Only) ---
-const DB: any = {
-  User: [],
-  Transaction: []
-};
-
-// --- 2. MOCK REALM CLASS (Fixed ID Generation) ---
-export const MockRealm = {
-  BSON: {
-    // We make this a Class so 'new ObjectId()' creates a unique object with a string ID
-    ObjectId: class {
-        id: string;
-        constructor() {
-            // Generate a random unique string
-            this.id = Date.now().toString(36) + Math.random().toString(36).substring(2, 9);
-        }
-        // This ensures when we do id.toString(), we get the actual value
-        toString() { return this.id; }
-        toHexString() { return this.id; }
-    }
-  },
-  Object: class {} 
-};
-
-// --- 3. THE CONTEXT ---
 export const RealmContext = createContext<any>(null);
 
 export const RealmProvider = ({ children }: any) => {
-  // This state forces the app to re-render when we "write" to the DB
-  const [tick, setTick] = useState(0);
+  const [transactions, setTransactions] = useState<any[]>([]);
+  const { user } = useAuth(); // 2. GET CURRENT USER
 
-  const realm = {
-    write: (callback: () => void) => {
-      callback();
-      setTick(t => t + 1); // Force Screen Update
-    },
-    create: (schema: string, data: any) => {
-      if (!DB[schema]) DB[schema] = [];
-      
-      // Ensure the ID is stored as a string, not an object
-      const safeData = { ...data };
-      if (safeData._id && typeof safeData._id === 'object') {
-          safeData._id = safeData._id.toString();
-      }
-
-      DB[schema].push(safeData);
-      console.log(`[DB] Created ${schema}:`, safeData);
-    },
-    objects: (schema: string) => {
-      return {
-        filtered: (query: string) => {
-          // Simple mock filter for Login
-          if (schema === 'User' && query.includes('mobile')) {
-             const mobile = query.split('==')[1].replace(/"/g, '').trim();
-             return DB.User.filter((u: any) => u.mobile === mobile);
-          }
-          return DB[schema];
-        }
-      };
+  useEffect(() => {
+    // 3. IF LOGGED OUT, CLEAR DATA AND STOP
+    if (!user) {
+      setTransactions([]);
+      return;
     }
-  };
+
+    console.log(`[Firebase] Fetching private data for User: ${user.email}`);
+    let unsubscribe: (() => void) | undefined;
+
+    try {
+        // 4. THE MAGIC: Point to the user's PRIVATE subcollection
+        const q = query(
+            collection(db, 'users', user.uid, 'transactions'), 
+            orderBy('date', 'desc')
+        );
+        
+        unsubscribe = onSnapshot(q, (snapshot) => {
+          const txData = snapshot.docs.map(doc => {
+            const data = doc.data();
+            let parsedDate = new Date();
+            if (data.date) {
+                if (typeof data.date.toDate === 'function') parsedDate = data.date.toDate();
+                else if (typeof data.date === 'string' || typeof data.date === 'number') parsedDate = new Date(data.date);
+            }
+            return { _id: doc.id, ...data, date: parsedDate };
+          });
+          
+          setTransactions(txData);
+        }, (error) => {
+          console.error("[Firebase] Listen Error:", error);
+        });
+
+    } catch (error) {
+        console.error("[Firebase] Init Error:", error);
+    }
+
+    return () => {
+        if (unsubscribe) unsubscribe();
+    };
+  }, [user]); // 5. RE-RUN WHENEVER THE USER LOGS IN OR OUT
 
   return (
-    <RealmContext.Provider value={{ realm, tick }}>
+    <RealmContext.Provider value={{ transactions }}>
       {children}
     </RealmContext.Provider>
   );
 };
 
-// --- 4. HOOKS ---
-export const useRealm = () => {
-  const ctx = useContext(RealmContext);
-  return ctx.realm;
-};
-
 export const useQuery = (schema: string) => {
   const ctx = useContext(RealmContext);
-  // Return the data from memory
-  const data = DB[schema] || [];
-  
-  // Add a fake 'sorted' function so the code doesn't crash
+  if (!ctx) return [];
+  const data = schema === 'Transaction' ? ctx.transactions : [];
   (data as any).sorted = () => data;
-  
   return data;
 };
 
-// Export as a single object for easier importing
-export const RealmContextObj = {
-  RealmProvider,
-  useRealm,
-  useQuery
-};
+export const useRealm = () => ({}); 
+
+export const RealmContextObj = { RealmProvider, useRealm, useQuery };
