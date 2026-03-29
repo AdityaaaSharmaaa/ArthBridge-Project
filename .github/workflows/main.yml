@@ -1,7 +1,7 @@
 name: Build Android APK
 
 on:
-  workflow_dispatch: # This allows you to click a button to build the APK
+  workflow_dispatch:
 
 jobs:
   build:
@@ -34,6 +34,9 @@ jobs:
           echo "EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET=arthbridge-92e85.firebasestorage.app" >> .env
           echo "EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=584309371887" >> .env
           echo "EXPO_PUBLIC_FIREBASE_APP_ID=1:584309371887:web:c750ee0dfdaf5233937c1a" >> .env
+
+      - name: Generate Android Folder (Prebuild)
+        run: npx expo prebuild --clean
 
       - name: Build the APK
         run: |
