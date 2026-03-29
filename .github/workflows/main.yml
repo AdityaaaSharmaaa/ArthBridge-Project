@@ -38,14 +38,17 @@ jobs:
       - name: Generate Android Folder (Prebuild)
         run: npx expo prebuild --clean
 
-      - name: Build the APK
+      - name: Build the APK (Debug Version)
+        env:
+          NODE_OPTIONS: "--max-old-space-size=4096"
         run: |
           cd android
+          echo "org.gradle.jvmargs=-Xmx4096m -XX:MaxPermSize=512m" >> gradle.properties
           chmod +x gradlew
-          ./gradlew assembleRelease
+          ./gradlew assembleDebug
 
       - name: Upload Final APK
         uses: actions/upload-artifact@v4
         with:
           name: ArthBridge-App
-          path: android/app/build/outputs/apk/release/app-release.apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
