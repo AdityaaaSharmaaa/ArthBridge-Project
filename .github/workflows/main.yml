@@ -1,0 +1,48 @@
+name: Build Android APK
+
+on:
+  workflow_dispatch: # This allows you to click a button to build the APK
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - name: Setup Java for Android
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Install NPM Dependencies
+        run: npm install
+
+      - name: Inject Firebase Keys
+        run: |
+          touch .env
+          echo "EXPO_PUBLIC_FIREBASE_API_KEY=AIzaSyDevEq6AjPuT_pWnHXa0Zu45oj1DigvX88" >> .env
+          echo "EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN=arthbridge-92e85.firebaseapp.com" >> .env
+          echo "EXPO_PUBLIC_FIREBASE_PROJECT_ID=arthbridge-92e85" >> .env
+          echo "EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET=arthbridge-92e85.firebasestorage.app" >> .env
+          echo "EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=584309371887" >> .env
+          echo "EXPO_PUBLIC_FIREBASE_APP_ID=1:584309371887:web:c750ee0dfdaf5233937c1a" >> .env
+
+      - name: Build the APK
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleRelease
+
+      - name: Upload Final APK
+        uses: actions/upload-artifact@v3
+        with:
+          name: ArthBridge-App
+          path: android/app/build/outputs/apk/release/app-release.apk
